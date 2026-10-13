@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e211a">
+  <meta name="description" content="Play 28/29 with four friends online, with live chat and video calls.">
+  <title>Card29 — Play together</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script defer src="/client.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="site-header">
+    <a class="brand" href="#" id="brandHome" aria-label="Card29 home">
+      <span class="brand-mark"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></span>
+      <span>card<span class="brand-highlight">29</span><small>THE FRIENDS TABLE</small></span>
+    </a>
+    <div class="header-right"><span class="live-dot"></span><span id="connectionLabel">Connecting…</span><span class="header-divider"></span><span class="header-tag">4 PLAYERS · 1 TABLE</span></div>
+  </header>
+
+  <main id="landingView" class="landing-shell">
+    <section class="hero-copy">
+      <div class="eyebrow"><span class="eyebrow-line"></span> YOUR NEXT GAME NIGHT STARTS HERE</div>
+      <h1>Good friends.<br><span>Great cards.</span></h1>
+      <p class="hero-intro">Bring your favourite people to one table. Play 28/29 live, talk your moves, and keep the banter going.</p>
+      <div class="feature-row">
+        <div class="feature"><span class="feature-icon">♧</span><span><b>Classic 29</b><small>Teams, bids & tricks</small></span></div>
+        <div class="feature"><span class="feature-icon">◉</span><span><b>Live together</b><small>Chat and video calls</small></span></div>
+        <div class="feature"><span class="feature-icon">↗</span><span><b>Easy to join</b><small>Just share a room code</small></span></div>
+      </div>
+      <div class="hero-footnote"><span>✦</span> No download. Just open your browser and play.</div>
+    </section>
+
+    <section class="entry-card" aria-label="Create or join a game">
+      <div class="entry-card-top"><span class="table-icon">♠</span><div><p class="micro-label">WELCOME TO THE TABLE</p><h2>Deal me in.</h2></div></div>
+      <label class="field-label" for="playerName">YOUR NAME</label>
+      <input id="playerName" class="text-field" maxlength="22" autocomplete="nickname" placeholder="What should friends call you?">
+      <button id="createRoomBtn" class="primary-button"><span>＋</span> Create a new table <span class="button-arrow">↗</span></button>
+      <div class="or-divider"><span></span><small>OR JOIN YOUR FRIENDS</small><span></span></div>
+      <label class="field-label" for="roomCodeInput">ROOM CODE</label>
+      <div class="join-row"><input id="roomCodeInput" class="text-field code-input" maxlength="6" placeholder="ABC123" autocomplete="off" spellcheck="false"><button id="joinRoomBtn" class="secondary-button">Join table <span>→</span></button></div>
+      <p class="entry-note"><span>🔒</span> Private rooms for you and your three friends.</p>
+    </section>
+    <div class="landing-bottom"><span>THE CLASSIC CARD GAME, NOW A LITTLE CLOSER.</span><span>MADE FOR YOUR INNER CIRCLE <span class="tiny-heart">♥</span></span></div>
+  </main>
+
+  <main id="roomView" class="room-shell hidden">
+    <div class="room-topbar">
+      <div class="room-heading"><button id="leaveRoomBtn" class="icon-button" title="Leave room" aria-label="Leave room">←</button><div><div class="room-title-row"><h1>Game table</h1><span id="phasePill" class="phase-pill">LOBBY</span></div><p>Four seats. Two teams. One winner.</p><div class="room-live-status"><i id="roomConnectionDot" class="room-connection-dot"></i><span id="roomConnectionLabel">Connecting…</span></div></div></div>
+      <button id="copyCodeBtn" class="room-code-card"><span><small>ROOM CODE</small><b id="roomCodeDisplay">———</b></span><span class="copy-symbol">▢</span></button>
+    </div>
+
+    <div class="room-layout">
+      <section class="play-column">
+        <div id="lobbyPanel" class="lobby-panel">
+          <div class="lobby-intro"><div><p class="micro-label">BEFORE THE FIRST DEAL</p><h2>Pull up a seat.</h2><p>Share your room code, get all four players ready, and let the cards decide.</p></div><div class="ready-count"><strong id="readyCount">0/4</strong><span>READY</span></div></div>
+          <div id="lobbySeats" class="lobby-seats"></div>
+          <div class="lobby-actions"><p id="lobbyHint" class="subtle-hint">Waiting for your friends to join…</p><div class="action-buttons"><button id="readyBtn" class="secondary-button" disabled>I'm ready</button><button id="startGameBtn" class="primary-button" disabled>Start game <span>→</span></button></div></div>
+        </div>
+
+        <div id="gamePanel" class="game-panel hidden">
+          <div class="score-strip">
+            <div class="score-team team-ns"><span class="team-emblem">N/S</span><div><small>NORTH / SOUTH</small><strong id="scoreTeam0">0</strong></div></div>
+            <div class="score-center"><span>MATCH SCORE</span><div class="score-track"><i id="scoreBar0"></i><i id="scoreBar1"></i></div><small>First to 6 wins</small></div>
+            <div class="score-team team-ew"><span class="team-emblem">E/W</span><div><small>EAST / WEST</small><strong id="scoreTeam1">0</strong></div></div>
+          </div>
+          <p class="team-partner-note">Matching team badges are partners: <strong>N/S</strong> and <strong>E/W</strong>. Opposite seats are teammates.</p>
+          <div class="round-points-strip" aria-live="polite">
+            <div><span class="round-team-dot ns-dot"></span><span>N/S round points</span><strong id="roundPointTeam0">0</strong></div>
+            <div><span class="round-team-dot ew-dot"></span><span>E/W round points</span><strong id="roundPointTeam1">0</strong></div>
+            <div class="round-points-total"><span>Tricks completed</span><strong id="completedTricksCount">0 / 8</strong></div>
+          </div>
+          <div id="tableStage" class="table-stage">
+            <div id="seatTop" class="player-seat seat-top"></div>
+            <div id="seatLeft" class="player-seat seat-left"></div>
+            <div id="seatRight" class="player-seat seat-right"></div>
+            <div id="trickCenter" class="trick-center"></div>
+            <div id="seatBottom" class="player-seat seat-bottom"></div>
+          </div>
+          <div id="statusBanner" class="status-banner"><span class="status-dot"></span><span id="statusText">Waiting for the deal…</span></div>
+          <div id="actionPanel" class="action-panel"></div>
+          <div class="hand-heading"><div><p class="micro-label">YOUR HAND</p><h3>Pick your play <span id="handCount" class="hand-count">8 cards</span></h3></div><span class="hand-tip">Tap a card on your turn</span></div>
+          <div id="playerHand" class="player-hand"></div>
+          <section class="hand-score-strip" aria-label="Points earned in each hand" aria-live="polite">
+            <div id="handScoreValues" class="hand-score-values"></div>
+          </section>
+          <div class="rules-note"><span>ⓘ</span> Rank: J · 9 · A · 10 · K · Q · 8 · 7 <i></i> Card points: J=3, 9=2, A/10=1 <i></i> Rang = trump suit</div>
+        </div>
+      </section>
+
+      <aside class="social-panel">
+        <div class="social-tabs"><button id="chatTab" class="social-tab active">☰ <span>Chat</span><i id="chatUnread" class="unread-dot hidden"></i></button><button id="videoTab" class="social-tab">◉ <span>Video room</span></button></div>
+        <section id="chatPanel" class="chat-panel"><div class="panel-heading"><div><h3>Table talk</h3><p>Talk strategy. Talk nonsense. It's all good.</p></div><span class="chat-status"><i></i> LIVE</span></div><div id="chatMessages" class="chat-messages"></div><form id="chatForm" class="chat-compose"><input id="chatInput" maxlength="500" placeholder="Send a message…" autocomplete="off"><button aria-label="Send message" type="submit">↑</button></form><div class="chat-footer">Be kind. Keep it friendly. Have fun.</div></section>
+        <section id="videoPanel" class="video-panel hidden"><div class="panel-heading"><div><h3>Face to face</h3><p>See the reactions, not just the cards.</p></div><span class="video-status"><i></i> WEBRTC</span></div><div id="videoGrid" class="video-grid"><div class="video-empty"><span>◉</span><b>Your video room</b><p>Join with camera and microphone to see your friends here.</p></div></div><div class="video-controls"><button id="joinVideoBtn" class="primary-button">◉ Join video call</button><button id="micBtn" class="video-control hidden" title="Toggle microphone">🎙</button><button id="cameraBtn" class="video-control hidden" title="Toggle camera">▣</button><button id="leaveVideoBtn" class="video-control danger hidden" title="Leave video">×</button></div><p class="video-footnote">Camera and microphone permissions are requested only when you join.</p></section>
+      </aside>
+    </div>
+    <footer class="room-footer"><span>♠ ♥ ♦ ♣ <b>CARD29</b> · THE FRIENDS TABLE</span><span>Be the player your team thinks you are.</span></footer>
+  </main>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+  <div id="confirmOverlay" class="confirm-overlay hidden"><div class="confirm-card"><span class="confirm-mark">↗</span><h3>Leave this table?</h3><p>You will leave the current room. Your friends can keep playing, but an ongoing round will reset if a player leaves.</p><div class="confirm-actions"><button id="stayBtn" class="secondary-button">Stay here</button><button id="confirmLeaveBtn" class="primary-button">Leave table</button></div></div></div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: card29-online
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health

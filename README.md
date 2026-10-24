@@ -3,7 +3,10 @@
 - The Rang picker shows all four suits (Clubs ♣, Spades ♠, Hearts ♥, Diamonds ♦); suits not in the dealer's hand are shown disabled.
 - Team badges identify partners: opposite seats play together; N/S seats are one team and E/W seats are the other.
 - A compact left-to-right hand-score strip shows each completed hand's points and team, with no played-card history.
-- Played card faces are not sent in the public live-trick or history payload.
+- Played card faces are public during the live trick and displayed on the table.
+- The current player holding Rang may reveal it only on their turn.
+- The landing page lists live rooms, occupancy, and joinable room codes.
+- Incoming room chat and video-call activity triggers toast notifications.
 - On phone screens, the large Card29 site header is hidden while inside a room, with connection status moved into the room header. Chat input stays visible at the bottom of the chat panel.
 
 # Card29 — Play with your friends

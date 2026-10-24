@@ -61,10 +61,19 @@ function sysChat(room, text) {
   if (room.chat.length > 100) room.chat.splice(0, room.chat.length - 100);
 }
 function emitNotice(socket, text, type = 'info') { socket.emit('notice', { text, type }); }
+function broadcastRoomList() {
+  const list = [...rooms.values()].map((room) => ({
+    code: room.code, players: room.players.filter(Boolean).length, capacity: 4,
+    status: room.game ? (['roundEnd', 'gameOver'].includes(room.game.phase) ? 'Round complete' : 'In progress') : 'Waiting for players',
+    joinable: !room.game && room.players.some((p) => p === null),
+  })).sort((a, b) => a.code.localeCompare(b.code));
+  io.emit('rooms:list', list);
+}
 function broadcastState(room) {
   for (const p of room.players) {
     if (p) io.to(p.id).emit('state', stateFor(room, p.id));
   }
+  broadcastRoomList();
 }
 function stateFor(room, viewerId) {
   const viewerSeat = seatOf(room, viewerId);
@@ -87,8 +96,8 @@ function stateFor(room, viewerId) {
       trumpRevealed: game.trumpRevealed,
       trickNumber: game.tricksCompleted + (game.phase === 'playing' ? 1 : 0),
       tricksCompleted: game.tricksCompleted,
-      // Only send the count/seat activity for the live trick; the UI intentionally does not display played cards.
-      currentTrick: game.currentTrick.map((item) => ({ seat: item.seat })),
+      // Played cards are public information; send card faces so every client can render the live trick.
+      currentTrick: game.currentTrick.map((item) => ({ seat: item.seat, card: item.card })),
       lastTrick: game.lastTrick ? {
         winnerSeat: game.lastTrick.winnerSeat,
         points: game.lastTrick.points,
@@ -286,6 +295,7 @@ function cleanupRoom(room) {
 io.on('connection', (socket) => {
   socket.data.roomCode = null;
   socket.data.videoReady = false;
+  socket.emit('rooms:list', [...rooms.values()].map((room) => ({ code: room.code, players: room.players.filter(Boolean).length, capacity: 4, status: room.game ? (['roundEnd', 'gameOver'].includes(room.game.phase) ? 'Round complete' : 'In progress') : 'Waiting for players', joinable: !room.game && room.players.some((p) => p === null) })));
 
   socket.on('room:create', (payload = {}) => {
     if (socket.data.roomCode) return emitNotice(socket, 'Leave your current room before creating another.', 'error');
@@ -382,6 +392,7 @@ io.on('connection', (socket) => {
     const g = ctx.room.game;
     if (!g || g.phase !== 'playing' || !g.trump || g.trumpRevealed) return emitNotice(socket, 'Trump cannot be revealed right now.', 'error');
     if (!g.hands[ctx.seat].some((c) => c.suit === g.trump)) return emitNotice(socket, 'You need to hold a trump card to reveal it.', 'error');
+    if (g.currentTurn !== ctx.seat) return emitNotice(socket, 'Only the player whose turn it is can reveal Rang.', 'error');
     g.trumpRevealed = true;
     sysChat(ctx.room, `${ctx.player.name} revealed trump: ${SUIT_SYMBOLS[g.trump]}.`);
     broadcastState(ctx.room);
@@ -410,6 +421,7 @@ io.on('connection', (socket) => {
     const text = String(payload.text || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 500);
     if (!text) return;
     ctx.room.chat.push({ id: `${Date.now()}-${Math.random()}`, system: false, seat: ctx.seat, name: ctx.player.name, text, at: Date.now() });
+    socket.to(ctx.room.code).emit('room:activity', { type: 'chat', name: ctx.player.name, text: text.slice(0, 90) });
     if (ctx.room.chat.length > 100) ctx.room.chat.splice(0, ctx.room.chat.length - 100);
     broadcastState(ctx.room);
   });
@@ -417,12 +429,15 @@ io.on('connection', (socket) => {
   socket.on('video:ready', () => {
     const ctx = member(null, socket); if (ctx.error) return emitNotice(socket, ctx.error, 'error');
     socket.data.videoReady = true;
+    socket.to(ctx.room.code).emit('room:activity', { type: 'video', name: ctx.player.name });
+    broadcastRoomList();
     announceVideoPeers(ctx.room, socket);
   });
   socket.on('video:leave', () => {
     const ctx = member(null, socket);
     socket.data.videoReady = false;
-    if (!ctx.error) io.to(ctx.room.code).emit('video:peer-left', { id: socket.id });
+    if (!ctx.error) { io.to(ctx.room.code).emit('video:peer-left', { id: socket.id }); io.to(ctx.room.code).emit('room:activity', { type: 'video-left', name: ctx.player.name }); }
+    broadcastRoomList();
   });
   for (const signalType of ['video:offer', 'video:answer', 'video:ice']) {
     socket.on(signalType, (payload = {}) => {
@@ -469,6 +484,7 @@ function leaveRoom(socket, disconnecting = false) {
     }
     if (room.players.every((p) => p === null)) cleanupRoom(room);
     else broadcastState(room);
+    broadcastRoomList();
   }
   if (!disconnecting) socket.leave(code);
 }

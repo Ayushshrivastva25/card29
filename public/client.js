@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 let appState = null;
 let activeTab = 'chat';
 let lastChatLength = 0;
+let liveRooms = [];
 let localStream = null;
 let videoJoined = false;
 let micEnabled = true;
@@ -34,6 +35,12 @@ socket.on('disconnect', () => {
 });
 socket.on('connect_error', () => setConnectionStatus('Connection issue', false));
 socket.on('notice', (notice) => showToast(notice?.text || 'Something went wrong.', notice?.type || 'info'));
+socket.on('rooms:list', (rooms) => { liveRooms = Array.isArray(rooms) ? rooms : []; renderLiveRooms(); });
+socket.on('room:activity', (activity = {}) => {
+  if (activity.type === 'chat') showToast(`💬 ${activity.name}: ${activity.text}`, 'info');
+  else if (activity.type === 'video') showToast(`📹 ${activity.name} joined the video call.`, 'success');
+  else if (activity.type === 'video-left') showToast(`📹 ${activity.name} left the video call.`, 'info');
+});
 socket.on('state', (state) => {
   const previousLength = lastChatLength;
   appState = state;
@@ -155,13 +162,25 @@ function renderApp(chatChanged = false) {
   document.body.classList.toggle('in-room', inRoom);
   $('landingView').classList.toggle('hidden', inRoom);
   $('roomView').classList.toggle('hidden', !inRoom);
-  if (!inRoom) return;
+  if (!inRoom) { renderLiveRooms(); return; }
   $('roomCodeDisplay').textContent = appState.code;
   $('phasePill').textContent = appState.game ? (PHASE_LABELS[appState.game.phase] || appState.game.phase.toUpperCase()) : 'LOBBY';
   renderLobby();
   if (appState.game) renderGame();
   renderChat(chatChanged);
   setTab(activeTab, false);
+}
+function renderLiveRooms() {
+  const list = $('liveRoomList');
+  if (!list) return;
+  $('liveRoomCount').textContent = `${liveRooms.length} room${liveRooms.length === 1 ? '' : 's'}`;
+  if (!liveRooms.length) { list.innerHTML = '<p class="rooms-empty">No active rooms yet. Create a table and invite your friends.</p>'; return; }
+  list.innerHTML = liveRooms.map((room) => `<div class="live-room-row"><div class="live-room-info"><strong>${escapeHtml(room.code)}</strong><span>${room.players}/${room.capacity} players · ${escapeHtml(room.status)}</span></div>${room.joinable ? `<button class="secondary-button live-join-btn" data-room-code="${escapeHtml(room.code)}">Join</button>` : '<span class="room-full-label">In game</span>'}</div>`).join('');
+  list.querySelectorAll('[data-room-code]').forEach((button) => button.addEventListener('click', () => {
+    const name = getName(); if (!name) return;
+    $('roomCodeInput').value = button.dataset.roomCode;
+    socket.emit('room:join', { name, code: button.dataset.roomCode });
+  }));
 }
 function renderLobby() {
   const lobby = !appState.game;
@@ -266,7 +285,15 @@ function renderTrick() {
   else if (g.phase === 'trickComplete') label = `HAND ${g.tricksCompleted} COMPLETE`;
   else if (g.phase === 'roundEnd' || g.phase === 'gameOver') label = 'ROUND COMPLETE';
   const count = g.phase === 'playing' ? `${g.currentTrick.length}/4 players have played` : `${g.tricksCompleted || 0}/8 hands complete`;
-  $('trickCenter').innerHTML = `<div class="trick-mat"><div class="empty-trick"><span class="trick-symbols"><span>♣ ♠</span> <span class="red-cards">♥ ♦</span></span><strong>${label}</strong><small>${count}</small></div></div>`;
+  const positions = relativeSeats();
+  const played = Array.isArray(g.currentTrick) ? g.currentTrick : [];
+  const slots = played.map((item) => {
+    const position = Object.keys(positions).find((key) => positions[key] === item.seat) || 'bottom';
+    const card = item.card ? cardMarkup(item.card) : '';
+    return `<div class="played-slot played-${position}" title="${escapeHtml(currentPlayerName(item.seat))}">${card}<span class="played-card-name">${escapeHtml(currentPlayerName(item.seat))}</span></div>`;
+  }).join('');
+  const empty = played.length ? '' : `<div class="empty-trick"><span class="trick-symbols"><span>♣ ♠</span> <span class="red-cards">♥ ♦</span></span><strong>${label}</strong><small>${count}</small></div>`;
+  $('trickCenter').innerHTML = `<div class="trick-mat">${empty}${slots}<div class="trick-progress">${label} · ${count}</div></div>`;
 }
 function currentPlayerName(seat) { return appState.players.find((p) => p.seat === seat)?.name || 'A player'; }
 function renderStatusAndActions() {
@@ -299,7 +326,7 @@ function renderStatusAndActions() {
   } else if (g.phase === 'playing') {
     const rangLabel = g.trump ? `Rang: ${SUITS[g.trump].symbol} ${SUITS[g.trump].label}` : (g.trumpHidden ? 'Rang: hidden' : '');
     status = (myTurn ? 'Your turn — choose a card to play.' : `${currentPlayerName(g.currentTurn)} is playing${g.leadSuit ? ` · lead suit ${SUITS[g.leadSuit].symbol}` : ''}.`) + (rangLabel ? ` · ${rangLabel}` : '');
-    if (g.youCanReveal && !g.trumpRevealed) html = '<button class="secondary-button" id="revealTrumpBtn">♢ Reveal Rang (trump)</button><p class="action-label rang-help">Any player holding a card of the chosen suit can reveal Rang.</p>';
+    if (g.youCanReveal && !g.trumpRevealed && myTurn) html = '<button class="secondary-button" id="revealTrumpBtn">♢ Reveal Rang (trump)</button><p class="action-label rang-help">You can reveal Rang now because it is your turn.</p>';
     if (!myTurn && !html) html = `<p class="action-label">${g.currentTrick.length}/4 cards played in this trick. Follow suit when you can.</p>`;
   } else if (g.phase === 'trickComplete') {
     status = `${currentPlayerName(g.lastTrick?.winnerSeat)} won trick ${g.lastTrick?.trickNumber} and took ${g.lastTrick?.points} point${g.lastTrick?.points === 1 ? '' : 's'}.`;
@@ -344,7 +371,7 @@ function renderChat(chatChanged) {
     const time = new Date(item.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return `<div class="chat-message ${mine ? 'mine' : ''}"><div class="chat-meta"><strong>${mine ? 'You' : escapeHtml(item.name)}</strong><time>${time}</time></div><div class="chat-bubble">${escapeHtml(item.text)}</div></div>`;
   }).join('');
-  if (shouldScroll) container.scrollTop = container.scrollHeight;
+  if (shouldScroll) requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
   $('chatUnread').classList.toggle('hidden', activeTab === 'chat' || !chatChanged);
 }
 function setTab(tab, render = true) {

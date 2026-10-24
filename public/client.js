@@ -35,6 +35,12 @@ socket.on('disconnect', () => {
 });
 socket.on('connect_error', () => setConnectionStatus('Connection issue', false));
 socket.on('notice', (notice) => showToast(notice?.text || 'Something went wrong.', notice?.type || 'info'));
+socket.on('room:removed', (payload = {}) => {
+  if (videoJoined) leaveVideoCall();
+  appState = null; lastChatLength = 0;
+  renderApp(false);
+  showToast(payload.message || 'You were removed from the room.', 'error');
+});
 socket.on('rooms:list', (rooms) => { liveRooms = Array.isArray(rooms) ? rooms : []; renderLiveRooms(); });
 socket.on('room:activity', (activity = {}) => {
   if (activity.type === 'chat') showToast(`💬 ${activity.name}: ${activity.text}`, 'info');
@@ -196,8 +202,13 @@ function renderLobby() {
     const subtitle = !occupied ? 'Open seat' : p.ready ? 'Ready to play' : p.host ? 'Room creator' : 'Getting settled';
     const team = p.seat % 2 === 0 ? 'N/S' : 'E/W';
     const teamClass = team === 'N/S' ? 'team-ns-badge' : 'team-ew-badge';
-    return `<div class="lobby-seat ${occupied ? 'occupied' : ''}">${badge}<div class="seat-avatar">${occupied ? escapeHtml(initials(p.name)) : '＋'}</div><div class="seat-name">${escapeHtml(p.name)}</div><div class="seat-meta">${subtitle}</div><span class="lobby-team-badge ${teamClass}">Seat ${p.seat + 1} · ${team} team</span></div>`;
+    return `<div class="lobby-seat ${occupied ? 'occupied' : ''}">${badge}<div class="seat-avatar">${occupied ? escapeHtml(initials(p.name)) : '＋'}</div><div class="seat-name">${escapeHtml(p.name)}</div><div class="seat-meta">${subtitle}</div><span class="lobby-team-badge ${teamClass}">Seat ${p.seat + 1} · ${team} team</span>${occupied && appState.hostId === appState.you && p.id !== appState.you ? `<button class="remove-player-btn" data-remove-player="${escapeHtml(p.id)}" aria-label="Remove ${escapeHtml(p.name)}">Remove player</button>` : ''}</div>`;
   }).join('');
+  $('lobbySeats').querySelectorAll('[data-remove-player]').forEach((button) => button.addEventListener('click', () => {
+    const player = appState?.players.find((p) => p.id === button.dataset.removePlayer);
+    if (!player || appState?.hostId !== appState?.you) return;
+    if (window.confirm(`Remove ${player.name} from this room?`)) socket.emit('room:remove-player', { playerId: player.id });
+  }));
   const mine = appState.players.find((p) => p.seat === appState.yourSeat);
   $('readyBtn').disabled = !mine;
   $('readyBtn').textContent = mine?.ready ? '✓ Ready — cancel' : "I'm ready";
@@ -265,9 +276,14 @@ function renderSeats() {
     const isSide = position === 'left' || position === 'right';
     const seatEl = $(`seat${position[0].toUpperCase()}${position.slice(1)}`);
     seatEl.className = `player-seat seat-${position} ${isTurn ? 'active-turn' : ''}`;
-    seatEl.innerHTML = `<div class="seat-mini-avatar">${escapeHtml(initials(p?.name || 'Player'))}<span class="seat-hand-count">${g.handCounts[seat]}</span></div><div class="seat-details"><div class="seat-player-name">${escapeHtml(p?.name || 'Player')}${seat === appState.yourSeat ? ' (you)' : ''}${isTurn ? '<span class="turn-marker">TURN</span>' : ''}</div><div class="seat-player-meta"><span class="seat-team-badge ${teamClass}">${teamLabel} team</span> ${meta}</div></div>`;
+    seatEl.innerHTML = `<div class="seat-mini-avatar">${escapeHtml(initials(p?.name || 'Player'))}<span class="seat-hand-count">${g.handCounts[seat]}</span></div><div class="seat-details"><div class="seat-player-name">${escapeHtml(p?.name || 'Player')}${seat === appState.yourSeat ? ' (you)' : ''}${isTurn ? '<span class="turn-marker">TURN</span>' : ''}</div><div class="seat-player-meta"><span class="seat-team-badge ${teamClass}">${teamLabel} team</span> ${meta}</div>${p && appState.hostId === appState.you && p.id !== appState.you ? `<button class="remove-player-btn game-remove-player" data-remove-player="${escapeHtml(p.id)}">Remove</button>` : ''}</div>`;
     if (!isSide) seatEl.style.flexDirection = position === 'top' ? 'row' : 'row-reverse';
   }
+  document.querySelectorAll('#tableStage [data-remove-player]').forEach((button) => button.addEventListener('click', () => {
+    const player = appState?.players.find((item) => item.id === button.dataset.removePlayer);
+    if (!player || appState?.hostId !== appState?.you) return;
+    if (window.confirm(`Remove ${player.name} from this room? The current game will reset.`)) socket.emit('room:remove-player', { playerId: player.id });
+  }));
 }
 function cardMarkup(card, button = false, disabled = false, canPlay = false) {
   const suit = SUITS[card.suit] || SUITS.spades;

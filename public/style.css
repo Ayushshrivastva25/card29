@@ -243,3 +243,25 @@ body{width:100%;min-width:0;overflow-x:hidden}
  body{overscroll-behavior-y:contain}
 }
 @media(max-width:400px){.live-room-row{padding:8px}.live-room-info span{font-size:9px}.played-card-name{max-width:40px}.trick-progress{letter-spacing:0}}
+
+
+/* Mobile scroll recovery: keep the document touch-scrollable and avoid trapping gestures. */
+html, body { min-height: 100%; height: auto; overflow-x: clip; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+body { overscroll-behavior-y: auto; }
+body.in-room { min-height: 100dvh; }
+.room-shell { height: auto; overflow: visible; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+.room-layout, .play-column, .lobby-panel, .game-panel, .social-panel { touch-action: pan-y; }
+.chat-messages, .live-room-list, .trick-history-rows, .player-hand { touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.lobby-seat { gap: 5px; }
+.remove-player-btn { position:relative; z-index:2; border:1px solid rgba(233,155,155,.35); border-radius:7px; background:rgba(150,50,50,.12); color:#ffb7b3; font-size:9px; font-weight:700; padding:6px 9px; min-height:32px; margin-top:5px; touch-action:manipulation; }
+.remove-player-btn:active { background:rgba(150,50,50,.28); }
+@media (max-width:760px) {
+  html, body { height:auto; min-height:100%; overflow-y:auto; touch-action:pan-y; }
+  .room-shell { padding:14px 12px max(28px, env(safe-area-inset-bottom)); }
+  .room-layout { display:flex; flex-direction:column; overflow:visible; }
+  .play-column, .lobby-panel, .game-panel, .social-panel { overflow:visible; }
+  .lobby-panel { min-height:0; padding:16px; }
+  .lobby-seats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .chat-panel { overflow:visible; }
+  .chat-messages { overscroll-behavior:auto; }
+}

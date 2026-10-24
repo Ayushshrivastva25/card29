@@ -325,6 +325,38 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 
+  socket.on('room:remove-player', (payload = {}) => {
+    const ctx = member(null, socket);
+    if (ctx.error) return emitNotice(socket, ctx.error, 'error');
+    const room = ctx.room;
+    if (room.hostId !== socket.id) return emitNotice(socket, 'Only the room creator can remove players.', 'error');
+    const targetId = String(payload.playerId || '');
+    if (!targetId || targetId === socket.id) return emitNotice(socket, 'You cannot remove yourself with this action.', 'error');
+    const target = room.players.find((player) => player && player.id === targetId);
+    if (!target) return emitNotice(socket, 'That player is no longer in this room.', 'error');
+    const targetSocket = io.sockets.sockets.get(targetId);
+    if (targetSocket) {
+      targetSocket.emit('room:removed', { code: room.code, message: 'The room creator removed you from this room.' });
+      targetSocket.data.roomCode = null;
+      targetSocket.data.videoReady = false;
+      targetSocket.leave(room.code);
+    }
+    const seat = seatOf(room, targetId);
+    if (seat >= 0) room.players[seat] = null;
+    io.to(room.code).emit('video:peer-left', { id: targetId });
+    sysChat(room, `${target.name} was removed by the room creator.`);
+    if (room.game) {
+      clearTimeout(room.timer);
+      room.timer = null;
+      room.game = null;
+      for (const player of room.players) if (player) player.ready = false;
+      sysChat(room, 'The game was reset because a player was removed. Ready up to start again.');
+    }
+    if (room.players.every((player) => player === null)) cleanupRoom(room);
+    else broadcastState(room);
+    broadcastRoomList();
+  });
+
   socket.on('player:ready', () => {
     const ctx = member(null, socket); if (ctx.error) return emitNotice(socket, ctx.error, 'error');
     if (ctx.room.game) return emitNotice(socket, 'The round is already running.', 'error');
